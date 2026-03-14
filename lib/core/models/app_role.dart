@@ -1,0 +1,2 @@
+enum AppRole { host, participant }
+
