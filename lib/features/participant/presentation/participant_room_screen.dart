@@ -203,6 +203,9 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
         final sourceOnlyLaneLanguages = _sourceOnlyParticipantLaneLanguages(
           session,
         );
+        final selectableTranscriptLanguages = transcriptLaneLanguagesForSession(
+          session,
+        );
         final unavailableTranscriptLanguage =
             _activeUnavailableTranscriptLanguage(session);
 
@@ -278,7 +281,7 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: session.supportedLanguages.map((language) {
+                      children: selectableTranscriptLanguages.map((language) {
                         final isTranslationReady =
                             machineTranslationLanguageCodeFor(language) != null;
                         return ChoiceChip(

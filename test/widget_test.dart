@@ -1435,6 +1435,70 @@ void main() {
     );
   });
 
+  testWidgets(
+    'participant still offers the original conversation when host language is omitted from supported languages',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final fallbackSession = _buildTestSession().copyWith(
+        supportedLanguages: const ['French', 'Spanish'],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ParticipantRoomScreen(
+            session: fallbackSession,
+            voiceDictationService: FakeVoiceDictationService(),
+            chatService: InMemoryChatService(),
+            handRaiseService: InMemoryHandRaiseService(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final scrollable = find.byType(Scrollable).first;
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('participant-language-English')),
+        250,
+        scrollable: scrollable,
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('participant-language-English')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('participant-language-English')), findsOneWidget);
+      expect(find.text('Language: English'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('participant-language-French')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Language: French'), findsOneWidget);
+      expect(find.text('View: translated'), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('participant-language-English')),
+        250,
+        scrollable: scrollable,
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('participant-language-English')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('participant-language-English')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Language: English'), findsOneWidget);
+      expect(find.text('View: original'), findsOneWidget);
+    },
+  );
+
   testWidgets('host keeps the main transcript in the host language', (
     WidgetTester tester,
   ) async {
