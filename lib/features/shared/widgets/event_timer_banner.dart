@@ -78,7 +78,9 @@ class _EventTimerBannerState extends State<EventTimerBanner> {
       child: ListTile(
         leading: Icon(_statusIcon()),
         title: Text(widget.session.eventName),
-        subtitle: Text('${_statusText(now)} • Scheduled $date at $time'),
+        subtitle: Text(
+          '${_statusText(now)} • Scheduled $date at $time • ${eventTimeZoneLabel(widget.session.eventTimeZone)} • ${daylightSavingTimeLabel(widget.session.isDaylightSavingTimeEnabled)}',
+        ),
         trailing: Chip(label: Text(widget.session.hostLanguage)),
       ),
     );
