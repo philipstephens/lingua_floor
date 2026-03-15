@@ -8,6 +8,11 @@
 .metadata
 .packages
 .pub/
+.local_toolchain/
+.local_toolchain_wrapped/
 build/
 coverage/
+
+assets/config/local_app_config.json
+assets/models/*.zip
 

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+exec "$SELF_DIR/_exec_real_tool.sh" "clang" "$@"

@@ -26,6 +26,35 @@ Flutter scaffold for a multilingual event translation and moderation app.
 2. Run `flutter pub get`
 3. Run `flutter run`
 
+### Linux desktop note
+
+Linux desktop now builds with the normal Flutter commands:
+
+- `flutter run -d linux`
+- `flutter build linux`
+
+Android Studio / IntelliJ users can use the shared run configurations in
+`.run/`:
+
+- `LinguaFloor Linux Flutter Debug`
+- `LinguaFloor Linux Desktop`
+- `LinguaFloor Linux Build`
+
+For the debugger-attached Flutter config, select the Linux desktop device in the
+IDE device picker, then run `LinguaFloor Linux Flutter Debug`.
+
+The shell-based `LinguaFloor Linux Desktop` and `LinguaFloor Linux Build`
+configs remain available as helpers, but the debugger-attached Flutter config
+now runs directly without a custom `PATH` override.
+
+## Ownership and licensing
+
+LinguaFloor is currently being developed as a proprietary project.
+
+Copyright © 2026 Philip Stephens. All rights reserved.
+
+This repository does not grant permission to copy, modify, or redistribute the app code unless separate written permission is provided. The app may include third-party open-source components that remain available under their own licenses and notices.
+
 ## Next recommended steps
 
 - add state management and routing packages
