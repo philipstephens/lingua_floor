@@ -33,19 +33,14 @@ Linux desktop now builds with the normal Flutter commands:
 - `flutter run -d linux`
 - `flutter build linux`
 
-Android Studio / IntelliJ users can use the shared run configurations in
-`.run/`:
+Android Studio / IntelliJ users can create local `.run/` configurations if they
+want IDE shortcuts for these commands.
 
-- `LinguaFloor Linux Flutter Debug`
-- `LinguaFloor Linux Desktop`
-- `LinguaFloor Linux Build`
+Those run configurations are intentionally gitignored, so a fresh checkout will
+not include shared `.run/` files.
 
-For the debugger-attached Flutter config, select the Linux desktop device in the
-IDE device picker, then run `LinguaFloor Linux Flutter Debug`.
-
-The shell-based `LinguaFloor Linux Desktop` and `LinguaFloor Linux Build`
-configs remain available as helpers, but the debugger-attached Flutter config
-now runs directly without a custom `PATH` override.
+For debugger-attached Linux desktop runs in the IDE, select the Linux desktop
+device and create a Flutter run configuration targeting `lib/main.dart`.
 
 ## Ownership and licensing
 
