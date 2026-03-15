@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>LinguaFloor uses the microphone so participants and hosts can dictate messages and floor requests.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>LinguaFloor uses speech recognition to turn spoken notes into editable text.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
