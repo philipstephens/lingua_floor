@@ -38,6 +38,11 @@ class InMemoryTranscriptFeedService implements TranscriptFeedService {
   }
 
   @override
+  Future<void> appendSegment(TranscriptSegment segment) async {
+    await replaceSegments([..._segments, segment]);
+  }
+
+  @override
   Future<void> clear() async {
     _segments = const [];
     _emit(_segments);

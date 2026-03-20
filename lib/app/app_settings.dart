@@ -4,30 +4,22 @@ class AppSettings {
   const AppSettings({
     this.datePickerButtonLabel = 'Pick date',
     this.timePickerButtonLabel = 'Pick time',
-    this.preferredParticipantTranscriptLanguage,
   });
 
   static const defaults = AppSettings();
 
   final String datePickerButtonLabel;
   final String timePickerButtonLabel;
-  final String? preferredParticipantTranscriptLanguage;
 
   @override
   bool operator ==(Object other) {
     return other is AppSettings &&
         other.datePickerButtonLabel == datePickerButtonLabel &&
-        other.timePickerButtonLabel == timePickerButtonLabel &&
-        other.preferredParticipantTranscriptLanguage ==
-            preferredParticipantTranscriptLanguage;
+        other.timePickerButtonLabel == timePickerButtonLabel;
   }
 
   @override
-  int get hashCode => Object.hash(
-    datePickerButtonLabel,
-    timePickerButtonLabel,
-    preferredParticipantTranscriptLanguage,
-  );
+  int get hashCode => Object.hash(datePickerButtonLabel, timePickerButtonLabel);
 }
 
 class AppSettingsController extends ChangeNotifier {
@@ -51,23 +43,6 @@ class AppSettingsController extends ChangeNotifier {
         timePickerButtonLabel,
         AppSettings.defaults.timePickerButtonLabel,
       ),
-      preferredParticipantTranscriptLanguage:
-          _settings.preferredParticipantTranscriptLanguage,
-    );
-
-    if (nextSettings == _settings) {
-      return;
-    }
-
-    _settings = nextSettings;
-    notifyListeners();
-  }
-
-  void updatePreferredParticipantTranscriptLanguage(String? language) {
-    final nextSettings = AppSettings(
-      datePickerButtonLabel: _settings.datePickerButtonLabel,
-      timePickerButtonLabel: _settings.timePickerButtonLabel,
-      preferredParticipantTranscriptLanguage: _normalizeOptionalValue(language),
     );
 
     if (nextSettings == _settings) {
@@ -81,11 +56,6 @@ class AppSettingsController extends ChangeNotifier {
   String _normalizeLabel(String value, String fallback) {
     final normalized = value.trim();
     return normalized.isEmpty ? fallback : normalized;
-  }
-
-  String? _normalizeOptionalValue(String? value) {
-    final normalized = value?.trim() ?? '';
-    return normalized.isEmpty ? null : normalized;
   }
 }
 

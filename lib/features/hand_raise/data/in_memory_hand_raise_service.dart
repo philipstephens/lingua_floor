@@ -53,6 +53,16 @@ class InMemoryHandRaiseService implements HandRaiseService {
   }
 
   @override
+  Future<void> moveRequestUp(String requestId) {
+    return _movePendingRequest(requestId, offset: -1);
+  }
+
+  @override
+  Future<void> moveRequestDown(String requestId) {
+    return _movePendingRequest(requestId, offset: 1);
+  }
+
+  @override
   void dispose() {
     _controller.close();
   }
@@ -61,5 +71,44 @@ class InMemoryHandRaiseService implements HandRaiseService {
     if (!_controller.isClosed) {
       _controller.add(requests);
     }
+  }
+
+  Future<void> _movePendingRequest(
+    String requestId, {
+    required int offset,
+  }) async {
+    final requestIndex = _requests.indexWhere(
+      (request) => request.id == requestId,
+    );
+    if (requestIndex == -1) {
+      throw StateError('Hand-raise request not found.');
+    }
+
+    if (_requests[requestIndex].status != HandRaiseRequestStatus.pending) {
+      return;
+    }
+
+    final pendingIndices = <int>[];
+    for (var index = 0; index < _requests.length; index++) {
+      if (_requests[index].status == HandRaiseRequestStatus.pending) {
+        pendingIndices.add(index);
+      }
+    }
+
+    final pendingPosition = pendingIndices.indexOf(requestIndex);
+    final swapPosition = pendingPosition + offset;
+    if (pendingPosition == -1 ||
+        swapPosition < 0 ||
+        swapPosition >= pendingIndices.length) {
+      return;
+    }
+
+    final nextRequests = [..._requests];
+    final swapIndex = pendingIndices[swapPosition];
+    final movedRequest = nextRequests[requestIndex];
+    nextRequests[requestIndex] = nextRequests[swapIndex];
+    nextRequests[swapIndex] = movedRequest;
+    _requests = List<HandRaiseRequest>.unmodifiable(nextRequests);
+    _emit(_requests);
   }
 }

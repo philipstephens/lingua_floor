@@ -1,2 +1,1 @@
 enum AppRole { host, participant }
-

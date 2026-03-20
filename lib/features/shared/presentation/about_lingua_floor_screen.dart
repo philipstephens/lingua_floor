@@ -11,9 +11,7 @@ class AboutLinguaFloorScreen extends StatelessWidget {
 
   void _openThirdPartyNotices(BuildContext context) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const ThirdPartyNoticesScreen(),
-      ),
+      MaterialPageRoute<void>(builder: (_) => const ThirdPartyNoticesScreen()),
     );
   }
 

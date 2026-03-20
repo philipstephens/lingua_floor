@@ -1,4 +1,5 @@
-import 'package:lingua_floor/app/app_settings.dart';
+import 'dart:async';
+
 import 'package:lingua_floor/core/models/app_role.dart';
 import 'package:flutter/material.dart';
 import 'package:lingua_floor/core/models/event_session.dart';
@@ -18,7 +19,11 @@ import 'package:lingua_floor/features/microphone/domain/models/transcript_segmen
 import 'package:lingua_floor/features/microphone/domain/services/voice_dictation_service.dart';
 import 'package:lingua_floor/features/microphone/presentation/widgets/voice_dictation_composer.dart';
 import 'package:lingua_floor/features/shared/widgets/event_timer_banner.dart';
+import 'package:lingua_floor/features/shared/widgets/language_picker_dialog.dart';
 import 'package:lingua_floor/features/shared/widgets/section_card.dart';
+import 'package:lingua_floor/features/speaker_draft/application/speaker_draft_controller.dart';
+import 'package:lingua_floor/features/speaker_draft/data/in_memory_speaker_draft_service.dart';
+import 'package:lingua_floor/features/speaker_draft/domain/services/speaker_draft_service.dart';
 import 'package:lingua_floor/features/transcript/application/transcript_feed_controller.dart';
 import 'package:lingua_floor/features/transcript/application/transcript_lane_controller.dart';
 import 'package:lingua_floor/features/transcript/domain/services/transcript_feed_service.dart';
@@ -29,21 +34,32 @@ class ParticipantRoomScreen extends StatefulWidget {
   const ParticipantRoomScreen({
     super.key,
     required this.session,
+    this.currentUserName = 'You',
+    this.onLogoutRequested,
+    this.preferredTranscriptLanguage,
+    this.onPreferredTranscriptLanguageChanged,
     this.eventSessionService,
     this.voiceDictationService,
     this.chatService,
     this.handRaiseService,
     this.transcriptFeedService,
     this.transcriptLaneService,
+    this.speakerDraftService,
   });
 
   final EventSession session;
+  final String currentUserName;
+  final Future<void> Function()? onLogoutRequested;
+  final String? preferredTranscriptLanguage;
+  final Future<void> Function(String? language)?
+  onPreferredTranscriptLanguageChanged;
   final EventSessionService? eventSessionService;
   final VoiceDictationService? voiceDictationService;
   final ChatService? chatService;
   final HandRaiseService? handRaiseService;
   final TranscriptFeedService? transcriptFeedService;
   final TranscriptLaneService? transcriptLaneService;
+  final SpeakerDraftService? speakerDraftService;
 
   @override
   State<ParticipantRoomScreen> createState() => _ParticipantRoomScreenState();
@@ -53,11 +69,12 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
   late final ChatController _chatController;
   late final EventSessionController _eventSessionController;
   late final HandRaiseController _handRaiseController;
+  Timer? _eventStartTicker;
   late String _selectedTranscriptLanguage;
   String? _unavailableTranscriptLanguage;
-  bool _didHydrateTranscriptPreference = false;
   TranscriptFeedController? _transcriptFeedController;
   TranscriptLaneController? _transcriptLaneController;
+  late final SpeakerDraftController _speakerDraftController;
 
   @override
   void initState() {
@@ -65,7 +82,7 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
     _selectedTranscriptLanguage = widget.session.hostLanguage;
     _chatController = ChatController(
       service: widget.chatService ?? _buildDemoChatService(),
-      currentUserName: 'You',
+      currentUserName: widget.currentUserName,
       currentUserRole: AppRole.participant,
       disposeService: widget.chatService == null,
     );
@@ -77,8 +94,11 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
     );
     _handRaiseController = HandRaiseController(
       service: widget.handRaiseService ?? InMemoryHandRaiseService(),
-      currentParticipantName: 'You',
+      currentParticipantName: widget.currentUserName,
       disposeService: widget.handRaiseService == null,
+      currentParticipantLanguageProvider: () {
+        return _resolvedTranscriptLanguage(_eventSessionController.session);
+      },
     );
     if (widget.transcriptFeedService != null) {
       _transcriptFeedController = TranscriptFeedController(
@@ -94,60 +114,91 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
       );
       _transcriptLaneController!.initialize();
     }
+    _speakerDraftController = SpeakerDraftController(
+      service: widget.speakerDraftService ?? InMemorySpeakerDraftService(),
+      disposeService: widget.speakerDraftService == null,
+    );
+    _eventSessionController.addListener(_syncCurrentSpeakerDraft);
+    _handRaiseController.addListener(_syncCurrentSpeakerDraft);
+    _eventStartTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
     _chatController.initialize();
     _eventSessionController.initialize();
     _handRaiseController.initialize();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_didHydrateTranscriptPreference) {
-      return;
-    }
-
-    final session = _eventSessionController.session;
-    final preferredTranscriptLanguage = AppSettingsScope.settingsOf(
-      context,
-    ).preferredParticipantTranscriptLanguage;
-    if (preferredTranscriptLanguage != null &&
-        preferredTranscriptLanguage.trim().isNotEmpty) {
-      final matchingSupportedTranscriptLanguage =
-          _matchingSupportedTranscriptLanguage(
-            session,
-            preferredTranscriptLanguage,
-          );
-      if (matchingSupportedTranscriptLanguage != null) {
-        _selectedTranscriptLanguage = matchingSupportedTranscriptLanguage;
-        if (matchingSupportedTranscriptLanguage !=
-            preferredTranscriptLanguage) {
-          _schedulePreferredTranscriptLanguageSync(
-            context,
-            matchingSupportedTranscriptLanguage,
-          );
-        }
-      } else if (_isSourceTranscriptLane(
-        session,
-        preferredTranscriptLanguage,
-      )) {
-        _selectedTranscriptLanguage = session.hostLanguage;
-      } else {
-        _selectedTranscriptLanguage = session.hostLanguage;
-        _unavailableTranscriptLanguage = preferredTranscriptLanguage;
-        _schedulePreferredTranscriptLanguageSync(context, session.hostLanguage);
-      }
-    }
-    _didHydrateTranscriptPreference = true;
+    unawaited(_speakerDraftController.initialize());
+    _hydratePreferredTranscriptLanguage(_eventSessionController.session);
+    _syncCurrentSpeakerDraft();
   }
 
   @override
   void dispose() {
+    _eventStartTicker?.cancel();
+    _eventSessionController.removeListener(_syncCurrentSpeakerDraft);
+    _handRaiseController.removeListener(_syncCurrentSpeakerDraft);
     _chatController.dispose();
     _eventSessionController.dispose();
     _handRaiseController.dispose();
     _transcriptFeedController?.dispose();
     _transcriptLaneController?.dispose();
+    _speakerDraftController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickParticipantTranscriptLanguage(EventSession session) async {
+    final selectedLanguage = await showSingleLanguagePickerDialog(
+      context: context,
+      title: 'Choose conversation language',
+      initialSelection: _resolvedTranscriptLanguage(session),
+      availableLanguages: transcriptLaneLanguagesForSession(session),
+      allowCustomLanguageEntry: false,
+    );
+    if (selectedLanguage == null || !mounted) {
+      return;
+    }
+
+    _updateSelectedTranscriptLanguage(selectedLanguage);
+  }
+
+  void _updateSelectedTranscriptLanguage(String language) {
+    setState(() {
+      _selectedTranscriptLanguage = language;
+      _unavailableTranscriptLanguage = null;
+    });
+    unawaited(widget.onPreferredTranscriptLanguageChanged?.call(language));
+  }
+
+  void _hydratePreferredTranscriptLanguage(EventSession session) {
+    final preferredTranscriptLanguage = widget.preferredTranscriptLanguage;
+    if (preferredTranscriptLanguage == null ||
+        preferredTranscriptLanguage.trim().isEmpty) {
+      return;
+    }
+
+    final matchingSelectableTranscriptLanguage =
+        _matchingSelectableTranscriptLanguage(
+          session,
+          preferredTranscriptLanguage,
+        );
+    if (matchingSelectableTranscriptLanguage != null) {
+      _selectedTranscriptLanguage = matchingSelectableTranscriptLanguage;
+      if (matchingSelectableTranscriptLanguage != preferredTranscriptLanguage) {
+        unawaited(
+          widget.onPreferredTranscriptLanguageChanged?.call(
+            matchingSelectableTranscriptLanguage,
+          ),
+        );
+      }
+      return;
+    }
+
+    _selectedTranscriptLanguage = session.hostLanguage;
+    _unavailableTranscriptLanguage = preferredTranscriptLanguage;
+    unawaited(
+      widget.onPreferredTranscriptLanguageChanged?.call(session.hostLanguage),
+    );
   }
 
   InMemoryChatService _buildDemoChatService() {
@@ -190,6 +241,8 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
     return AnimatedBuilder(
       animation: Listenable.merge([
         _eventSessionController,
+        _handRaiseController,
+        _speakerDraftController,
         ?transcriptFeedController,
         ?transcriptLaneController,
       ]),
@@ -210,7 +263,17 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
             _activeUnavailableTranscriptLanguage(session);
 
         return Scaffold(
-          appBar: AppBar(title: const Text('Participant Room')),
+          appBar: AppBar(
+            title: const Text('Participant Room'),
+            actions: [
+              IconButton(
+                key: const Key('participant-logout-button'),
+                tooltip: 'Logout',
+                onPressed: _handleLogoutRequested,
+                icon: const Icon(Icons.logout),
+              ),
+            ],
+          ),
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -234,17 +297,34 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
                     title: 'Participation controls',
                     subtitle:
                         'Raise your hand and track host moderation status.',
-                    child: _buildParticipationControls(context),
+                    child: _buildParticipationControls(context, session),
                   );
                 },
               ),
               const SizedBox(height: 12),
               VoiceDictationComposer(
+                title: 'Current draft',
+                subtitle: _participantOwnsCurrentDraft()
+                    ? 'Speak or type your next message, then send it to the shared room transcript.'
+                    : 'The active speaker draft appears here before it is sent to the room transcript.',
                 service: widget.voiceDictationService,
-                submitLabel: 'Send chat message',
-                submissionFeedbackPrefix: 'Chat message sent:',
-                clearAfterSubmit: true,
-                onSubmitted: _chatController.sendMessage,
+                hintText: _participantOwnsCurrentDraft()
+                    ? 'Speak or type here, then send to transcript.'
+                    : 'Only the active speaker can edit this draft.',
+                submitLabel: 'Send to transcript',
+                submissionFeedbackPrefix: 'Transcript message sent:',
+                clearAfterSubmit: false,
+                readOnly: !_participantOwnsCurrentDraft(),
+                enableSubmit:
+                    _participantOwnsCurrentDraft() &&
+                    _transcriptFeedController != null,
+                text: _speakerDraftController.draft?.text ?? '',
+                onTextChanged: _participantOwnsCurrentDraft()
+                    ? (value) =>
+                          unawaited(_speakerDraftController.updateText(value))
+                    : null,
+                textFieldKey: const Key('participant-current-draft-text-field'),
+                onSubmitted: (_) => _sendCurrentDraftToTranscript(),
               ),
               const SizedBox(height: 12),
               AnimatedBuilder(
@@ -278,47 +358,39 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
                       ),
                       const SizedBox(height: 12),
                     ],
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: selectableTranscriptLanguages.map((language) {
-                        final isTranslationReady =
-                            machineTranslationLanguageCodeFor(language) != null;
-                        return ChoiceChip(
-                          key: Key('participant-language-$language'),
-                          onSelected: (_) {
-                            setState(() {
-                              _selectedTranscriptLanguage = language;
-                              _unavailableTranscriptLanguage = null;
-                            });
-                            AppSettingsScope.maybeControllerOf(
-                              context,
-                            )?.updatePreferredParticipantTranscriptLanguage(
-                              language,
-                            );
-                          },
-                          avatar: Icon(
-                            isTranslationReady
-                                ? Icons.translate_outlined
-                                : Icons.language_outlined,
-                            size: 18,
-                          ),
-                          label: Text(language),
-                          selected: language == selectedTranscriptLanguage,
-                        );
-                      }).toList(),
+                    InkWell(
+                      key: const Key('participant-language-picker-button'),
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => _pickParticipantTranscriptLanguage(session),
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'Conversation language',
+                          helperText:
+                              'Tap to choose from the languages available in this room.',
+                          suffixIcon: Icon(Icons.arrow_drop_down),
+                        ),
+                        child: Text(
+                          languageDisplayLabelFor(selectedTranscriptLanguage),
+                          key: const Key('participant-selected-language-label'),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Available in this room: ${compactLanguageSummaryFor(selectableTranscriptLanguages)}',
+                      key: const Key('participant-language-available-summary'),
                     ),
                     if (translatedLaneLanguages.isNotEmpty) ...[
                       const SizedBox(height: 12),
                       Text(
-                        'Live translation ready: ${translatedLaneLanguages.join(', ')}',
+                        'Live translation ready: ${compactLanguageSummaryFor(translatedLaneLanguages)}',
                         key: const Key('participant-translated-lane-summary'),
                       ),
                     ],
                     if (sourceOnlyLaneLanguages.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(
-                        'Showing original for now: ${sourceOnlyLaneLanguages.join(', ')}',
+                        'Showing original for now: ${compactLanguageSummaryFor(sourceOnlyLaneLanguages)}',
                         key: const Key('participant-source-only-lane-summary'),
                       ),
                     ],
@@ -406,8 +478,16 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            Chip(label: Text('Language: $selectedTranscriptLanguage')),
-            Chip(label: Text('Source: ${session.hostLanguage}')),
+            Chip(
+              label: Text(
+                'Language: ${compactLanguageChipLabelFor(selectedTranscriptLanguage)}',
+              ),
+            ),
+            Chip(
+              label: Text(
+                'Source: ${compactLanguageChipLabelFor(session.hostLanguage)}',
+              ),
+            ),
             Chip(
               label: Text(
                 usingSharedTranscriptFeed
@@ -476,9 +556,13 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
     );
   }
 
-  Widget _buildParticipationControls(BuildContext context) {
+  Widget _buildParticipationControls(
+    BuildContext context,
+    EventSession session,
+  ) {
     final activeRequest = _handRaiseController.activeRequest;
     final isHandRaised = activeRequest != null;
+    final canRaiseHand = _hasEventStarted(session);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -488,7 +572,9 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
           runSpacing: 8,
           children: [
             FilledButton.icon(
-              onPressed: isHandRaised ? null : _handRaiseController.raiseHand,
+              onPressed: !canRaiseHand || isHandRaised
+                  ? null
+                  : _handRaiseController.raiseHand,
               icon: Icon(
                 isHandRaised ? Icons.pan_tool_alt_outlined : Icons.waving_hand,
               ),
@@ -496,7 +582,9 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
             ),
             Chip(
               label: Text(
-                activeRequest == null
+                !canRaiseHand && activeRequest == null
+                    ? 'Queue closed'
+                    : activeRequest == null
                     ? 'No active request'
                     : activeRequest.status.label,
               ),
@@ -507,7 +595,9 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
         ),
         const SizedBox(height: 12),
         Text(
-          activeRequest == null
+          !canRaiseHand && activeRequest == null
+              ? 'Hand raise will open when the event starts.'
+              : activeRequest == null
               ? 'Tap Raise hand to join the host moderation queue.'
               : _buildParticipationStatusMessage(activeRequest.status),
         ),
@@ -522,12 +612,83 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
     );
   }
 
+  HandRaiseRequest? _currentSpeakerRequest() {
+    for (final request in _handRaiseController.requests) {
+      if (request.status == HandRaiseRequestStatus.approved) {
+        return request;
+      }
+    }
+
+    return null;
+  }
+
+  bool _participantOwnsCurrentDraft() {
+    final currentSpeakerRequest = _currentSpeakerRequest();
+    final activeRequest = _handRaiseController.activeRequest;
+    return currentSpeakerRequest != null &&
+        activeRequest != null &&
+        activeRequest.id == currentSpeakerRequest.id &&
+        activeRequest.status == HandRaiseRequestStatus.approved;
+  }
+
+  void _syncCurrentSpeakerDraft() {
+    final session = _eventSessionController.session;
+    final currentSpeakerRequest = _currentSpeakerRequest();
+    final activeFloor = session.moderationRuntimeState.activeFloor;
+    final speakerLabel =
+        currentSpeakerRequest?.participantName ??
+        activeFloor?.speakerLabel ??
+        'Host';
+    final sourceLanguage =
+        currentSpeakerRequest?.participantLanguage?.trim().isNotEmpty == true
+        ? currentSpeakerRequest!.participantLanguage!
+        : activeFloor?.sourceLanguage?.trim().isNotEmpty == true
+        ? activeFloor!.sourceLanguage!
+        : session.hostLanguage;
+
+    unawaited(
+      _speakerDraftController.ensureSpeaker(
+        speakerLabel: speakerLabel,
+        sourceLanguage: sourceLanguage,
+      ),
+    );
+  }
+
+  Future<void> _sendCurrentDraftToTranscript() async {
+    final transcriptFeedController = _transcriptFeedController;
+    final draft = _speakerDraftController.draft;
+    if (!_participantOwnsCurrentDraft() ||
+        transcriptFeedController == null ||
+        draft == null ||
+        !draft.hasText) {
+      return;
+    }
+
+    final segment = TranscriptSegment(
+      speakerLabel: draft.speakerLabel,
+      originalText: draft.text.trim(),
+      capturedAt: DateTime.now(),
+      sourceLanguage: draft.sourceLanguage,
+      status: TranscriptSegmentStatus.finalized,
+    );
+
+    await transcriptFeedController.appendSegment(segment);
+    await _speakerDraftController.clear();
+  }
+
+  bool _hasEventStarted(EventSession session) {
+    return session.status != EventStatus.scheduled ||
+        !DateTime.now().isBefore(session.scheduledStartAt);
+  }
+
   String _buildParticipationStatusMessage(HandRaiseRequestStatus status) {
     return switch (status) {
       HandRaiseRequestStatus.pending =>
         'Your request is waiting for host approval.',
       HandRaiseRequestStatus.approved =>
         'The host has approved your request and may bring you on next.',
+      HandRaiseRequestStatus.banned =>
+        'The host has banned you from the floor queue for now.',
       HandRaiseRequestStatus.answered || HandRaiseRequestStatus.dismissed =>
         'Your latest request is no longer active.',
     };
@@ -539,14 +700,14 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
   }
 
   String _resolvedTranscriptLanguage(EventSession session) {
-    return _matchingSupportedTranscriptLanguage(
+    return _matchingSelectableTranscriptLanguage(
           session,
           _selectedTranscriptLanguage,
         ) ??
         session.hostLanguage;
   }
 
-  String? _matchingSupportedTranscriptLanguage(
+  String? _matchingSelectableTranscriptLanguage(
     EventSession session,
     String language,
   ) {
@@ -555,9 +716,11 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
       return null;
     }
 
-    for (final supportedLanguage in session.supportedLanguages) {
-      if (supportedLanguage.trim().toLowerCase() == normalizedLanguage) {
-        return supportedLanguage;
+    for (final selectableLanguage in transcriptLaneLanguagesForSession(
+      session,
+    )) {
+      if (selectableLanguage.trim().toLowerCase() == normalizedLanguage) {
+        return selectableLanguage;
       }
     }
 
@@ -570,7 +733,7 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
       return null;
     }
 
-    return _matchingSupportedTranscriptLanguage(
+    return _matchingSelectableTranscriptLanguage(
               session,
               unavailableTranscriptLanguage,
             ) ==
@@ -584,7 +747,7 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
     EventSession session,
   ) {
     final requestedTranscriptLanguage = _selectedTranscriptLanguage;
-    final supportedTranscriptLanguage = _matchingSupportedTranscriptLanguage(
+    final supportedTranscriptLanguage = _matchingSelectableTranscriptLanguage(
       session,
       requestedTranscriptLanguage,
     );
@@ -605,7 +768,7 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
       }
 
       final currentSupportedTranscriptLanguage =
-          _matchingSupportedTranscriptLanguage(
+          _matchingSelectableTranscriptLanguage(
             session,
             _selectedTranscriptLanguage,
           );
@@ -631,25 +794,17 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
         _unavailableTranscriptLanguage = nextUnavailableTranscriptLanguage;
       });
 
-      _schedulePreferredTranscriptLanguageSync(
-        context,
-        nextSelectedTranscriptLanguage,
-      );
+      _schedulePreferredTranscriptLanguageSync(nextSelectedTranscriptLanguage);
     });
   }
 
-  void _schedulePreferredTranscriptLanguageSync(
-    BuildContext context,
-    String language,
-  ) {
+  void _schedulePreferredTranscriptLanguageSync(String language) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
       }
 
-      AppSettingsScope.maybeControllerOf(
-        context,
-      )?.updatePreferredParticipantTranscriptLanguage(language);
+      unawaited(widget.onPreferredTranscriptLanguageChanged?.call(language));
     });
   }
 
@@ -718,6 +873,14 @@ class _ParticipantRoomScreenState extends State<ParticipantRoomScreen> {
     }
 
     return 'Switch to ${translatedLaneLanguages.join(', ')} to follow the conversation in another language during the event.';
+  }
+
+  Future<void> _handleLogoutRequested() async {
+    await widget.onLogoutRequested?.call();
+    if (!mounted) {
+      return;
+    }
+    Navigator.of(context).maybePop();
   }
 }
 

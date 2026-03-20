@@ -45,10 +45,12 @@ class _EventTimerBannerState extends State<EventTimerBanner> {
             ? 'Scheduled start time reached'
             : 'Starts in ${_formatDuration(remaining)}';
       case EventStatus.live:
-        final start = widget.session.actualStartAt ?? widget.session.scheduledStartAt;
+        final start =
+            widget.session.actualStartAt ?? widget.session.scheduledStartAt;
         return 'Live • ${_formatDuration(now.difference(start))}';
       case EventStatus.ended:
-        final start = widget.session.actualStartAt ?? widget.session.scheduledStartAt;
+        final start =
+            widget.session.actualStartAt ?? widget.session.scheduledStartAt;
         final end = widget.session.endedAt ?? now;
         return 'Ended • duration ${_formatDuration(end.difference(start))}';
     }
@@ -68,10 +70,12 @@ class _EventTimerBannerState extends State<EventTimerBanner> {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final date = MaterialLocalizations.of(context).formatShortDate(widget.session.scheduledStartAt);
-    final time = MaterialLocalizations.of(context).formatTimeOfDay(
-      TimeOfDay.fromDateTime(widget.session.scheduledStartAt),
-    );
+    final date = MaterialLocalizations.of(
+      context,
+    ).formatShortDate(widget.session.scheduledStartAt);
+    final time = MaterialLocalizations.of(
+      context,
+    ).formatTimeOfDay(TimeOfDay.fromDateTime(widget.session.scheduledStartAt));
 
     return Card(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -86,4 +90,3 @@ class _EventTimerBannerState extends State<EventTimerBanner> {
     );
   }
 }
-

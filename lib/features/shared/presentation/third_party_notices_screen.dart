@@ -15,8 +15,9 @@ class ThirdPartyNoticesScreen extends StatelessWidget {
       MaterialPageRoute<void>(
         builder: (_) => LicensePage(
           applicationName: 'LinguaFloor',
-          applicationVersion:
-              versionLabel == 'unavailable' ? null : versionLabel,
+          applicationVersion: versionLabel == 'unavailable'
+              ? null
+              : versionLabel,
           applicationLegalese:
               'Includes Flutter and third-party packages under their respective open-source licenses.',
         ),
@@ -33,16 +34,21 @@ class ThirdPartyNoticesScreen extends StatelessWidget {
         children: [
           const SectionCard(
             title: 'What this means',
-            subtitle:
-                'A plain-English summary for later app distribution.',
+            subtitle: 'A plain-English summary for later app distribution.',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('LinguaFloor includes Flutter and other open-source packages.'),
+                Text(
+                  'LinguaFloor includes Flutter and other open-source packages.',
+                ),
                 SizedBox(height: 8),
-                Text('These licenses generally allow commercial use, but they require keeping the original notices available.'),
+                Text(
+                  'These licenses generally allow commercial use, but they require keeping the original notices available.',
+                ),
                 SizedBox(height: 8),
-                Text('This screen gives users a place to review those notices inside the app.'),
+                Text(
+                  'This screen gives users a place to review those notices inside the app.',
+                ),
               ],
             ),
           ),
@@ -55,7 +61,8 @@ class ThirdPartyNoticesScreen extends StatelessWidget {
           const SizedBox(height: 12),
           const SectionCard(
             title: 'Current packages in use',
-            subtitle: 'Direct dependencies currently visible in this app scaffold.',
+            subtitle:
+                'Direct dependencies currently visible in this app scaffold.',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -68,7 +75,8 @@ class ThirdPartyNoticesScreen extends StatelessWidget {
           const SizedBox(height: 12),
           SectionCard(
             title: 'Full license texts',
-            subtitle: 'Opens Flutter’s built-in license viewer for bundled notices.',
+            subtitle:
+                'Opens Flutter’s built-in license viewer for bundled notices.',
             child: Align(
               alignment: Alignment.centerLeft,
               child: FilledButton.icon(

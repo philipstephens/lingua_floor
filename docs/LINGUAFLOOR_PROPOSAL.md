@@ -1,7 +1,7 @@
 # LinguaFloor
 
 ## Multilingual Event Translation & Moderation System
-**Proposal v3.1 – Single Flutter App Edition**
+**Proposal v3.2 – Single Flutter App Edition**
 
 - **Project name:** LinguaFloor
 - **Tech stack:** Flutter (Dart) + backend services + GitHub for version control/collaboration
@@ -11,6 +11,8 @@
 
 ## 1. Overview
 LinguaFloor is a real-time, moderated, multilingual event platform where one person speaks at a time under host-controlled floor management.
+
+One deployed LinguaFloor event can now contain multiple scheduled sessions/time periods, and each login is bound to one selected session plus a user role.
 
 Core flow:
 1. Speaker is granted the floor
@@ -53,20 +55,28 @@ App entry begins in `main.dart`.
 
 Join flow inputs:
 - Username/password or guest name
-- Event ID
+- Selected scheduled session / time period
 - Optional event password
 
 After backend validation, the app receives event/session data such as:
 - role: `host` or `participant`
 - event metadata
+- selected session ID / time period
 - allowed languages
 - permissions
 
-Navigation then routes the user to the correct home experience.
+Navigation then routes the user to the correct home experience for that selected scheduled session.
 Backend must enforce role permissions; client-side guards are only a convenience.
+
+Login/logout expectations:
+- A user logs in with a display name plus the selected scheduled session
+- Host and participant shells expose explicit logout actions
+- Logout clears the active auth session and returns to the join screen
 
 ## 4. Event Scheduling and Timer Feature
 LinguaFloor should include event scheduling metadata and a visible timer.
+
+Scheduling also needs a lightweight session catalog so users can choose among multiple time periods for the same shared floor.
 
 Stored fields:
 - `scheduledStartAt`
@@ -83,6 +93,7 @@ Usage:
 - Participants see whether they are early, on time, or joining a live event
 - Hosts can manually start the event even if the scheduled time has passed
 - Timer appears in the top event header on both host and participant screens
+- Join flow shows the currently selected scheduled session before role routing
 
 ## 5. Participant Mode
 Main participant screen includes:
@@ -99,7 +110,7 @@ Transcript bubbles should show:
 - translated text
 - subtle color coding
 
-Language selection should be searchable and persisted per device.
+Language selection should be searchable and persisted per user.
 
 ## 6. Host Mode
 The host dashboard is the event control center.
@@ -134,8 +145,9 @@ Moderation:
 ## 8. Translation and Realtime Pipeline
 Translation model:
 - Incoming speech/transcript is normalized in the host language
-- Participant output is generated per unique target language
-- Frequent phrases may be cached for performance
+- Participant output is generated per distinct target language
+- One user has one selected language at a time, but many users may share the same language
+- Cached translations for a target language are reused for all users on that language
 
 Realtime behavior:
 - Transcript deltas, queue changes, polls, and moderation events broadcast instantly
@@ -165,7 +177,7 @@ Secrets such as backend keys must be stored in GitHub Secrets, never committed t
 
 ## 11. Recommended Development Phases
 1. Initialize Flutter app and project structure
-2. Implement join/login flow with role routing
+2. Implement join/login flow with role routing, explicit logout, and scheduled-session selection
 3. Build participant room MVP
 4. Build host dashboard MVP
 5. Add realtime transcript sync
@@ -178,6 +190,8 @@ Secrets such as backend keys must be stored in GitHub Secrets, never committed t
 A strong first MVP should include:
 - event join screen
 - runtime role detection
+- multiple scheduled sessions / time periods per shared floor
+- explicit login/logout handling
 - host dashboard shell
 - participant live room shell
 - event timer/countdown/live state

@@ -38,6 +38,8 @@ class EventSessionController extends ChangeNotifier {
     required DateTime scheduledStartAt,
     required EventStatus status,
     required List<String> supportedLanguages,
+    required ModerationSettings moderationSettings,
+    required TranscriptRetentionPolicy transcriptRetentionPolicy,
   }) async {
     final trimmedEventName = eventName.trim();
     final trimmedHostLanguage = hostLanguage.trim();
@@ -71,6 +73,10 @@ class EventSessionController extends ChangeNotifier {
     );
 
     _errorMessage = null;
+    final nextEndedAt = _updatedEndedAt(status, scheduledStartAt);
+    final normalizedModerationSettings = _normalizeModerationSettings(
+      moderationSettings,
+    );
 
     try {
       await _service.updateSession(
@@ -82,14 +88,37 @@ class EventSessionController extends ChangeNotifier {
           scheduledStartAt: scheduledStartAt,
           actualStartAt: _updatedActualStartAt(status, scheduledStartAt),
           clearActualStartAt: status == EventStatus.scheduled,
-          endedAt: _updatedEndedAt(status, scheduledStartAt),
+          endedAt: nextEndedAt,
           clearEndedAt: status != EventStatus.ended,
           status: status,
           supportedLanguages: effectiveLanguages,
+          moderationSettings: normalizedModerationSettings,
+          transcriptRetentionPolicy: transcriptRetentionPolicy,
+          transcriptExpiresAt: transcriptRetentionPolicy.expiresAtFrom(
+            status == EventStatus.ended ? nextEndedAt : null,
+          ),
+          clearTranscriptExpiresAt:
+              status != EventStatus.ended ||
+              transcriptRetentionPolicy == TranscriptRetentionPolicy.forever,
         ),
       );
     } catch (error) {
       _errorMessage = 'Unable to save event setup: $error';
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateModerationRuntimeState(
+    ModerationRuntimeState moderationRuntimeState,
+  ) async {
+    _errorMessage = null;
+
+    try {
+      await _service.updateSession(
+        _session.copyWith(moderationRuntimeState: moderationRuntimeState),
+      );
+    } catch (error) {
+      _errorMessage = 'Unable to save moderation state: $error';
       notifyListeners();
     }
   }
@@ -109,8 +138,8 @@ class EventSessionController extends ChangeNotifier {
   ) {
     return switch (status) {
       EventStatus.scheduled => null,
-      EventStatus.live || EventStatus.ended =>
-        _session.actualStartAt ?? scheduledStartAt,
+      EventStatus.live ||
+      EventStatus.ended => _session.actualStartAt ?? scheduledStartAt,
     };
   }
 
@@ -141,7 +170,10 @@ class EventSessionController extends ChangeNotifier {
     return normalized;
   }
 
-  List<String> _ensureHostLanguage(List<String> languages, String hostLanguage) {
+  List<String> _ensureHostLanguage(
+    List<String> languages,
+    String hostLanguage,
+  ) {
     if (languages.any(
       (language) => language.toLowerCase() == hostLanguage.toLowerCase(),
     )) {
@@ -149,5 +181,13 @@ class EventSessionController extends ChangeNotifier {
     }
 
     return [hostLanguage, ...languages];
+  }
+
+  ModerationSettings _normalizeModerationSettings(ModerationSettings settings) {
+    if (settings.meetingMode == MeetingMode.debate) {
+      return settings.copyWith(formalProceduresEnabled: false);
+    }
+
+    return settings;
   }
 }

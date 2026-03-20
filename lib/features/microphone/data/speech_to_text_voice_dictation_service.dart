@@ -88,6 +88,7 @@ class SpeechToTextVoiceDictationService implements VoiceDictationService {
     _emit(
       _state.copyWith(
         status: VoiceDictationStatus.listening,
+        recognizedText: _baseText,
         activeLocaleId: localeId,
         clearError: true,
       ),
@@ -117,10 +118,7 @@ class SpeechToTextVoiceDictationService implements VoiceDictationService {
     await _speechToText.stop();
     if (_state.isAvailable) {
       _emit(
-        _state.copyWith(
-          status: VoiceDictationStatus.ready,
-          clearError: true,
-        ),
+        _state.copyWith(status: VoiceDictationStatus.ready, clearError: true),
       );
     }
   }
