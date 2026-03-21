@@ -14,5 +14,9 @@ abstract class HandRaiseService {
     required HandRaiseRequestStatus status,
   });
 
+  Future<void> moveRequestUp(String requestId);
+
+  Future<void> moveRequestDown(String requestId);
+
   void dispose();
 }

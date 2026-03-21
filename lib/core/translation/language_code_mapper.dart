@@ -72,6 +72,24 @@ const Map<String, String> _languageCodesByName = <String, String>{
   'zulu': 'zu',
 };
 
+const Map<String, String> _languageFlagsByCode = <String, String>{
+  'am': '🇪🇹',
+  'ar': '🇸🇦',
+  'de': '🇩🇪',
+  'en': '🇬🇧',
+  'es': '🇪🇸',
+  'fr': '🇫🇷',
+  'hi': '🇮🇳',
+  'it': '🇮🇹',
+  'ja': '🇯🇵',
+  'ko': '🇰🇷',
+  'pt': '🇵🇹',
+  'sw': '🇰🇪',
+  'tl': '🇵🇭',
+  'vi': '🇻🇳',
+  'zh': '🇨🇳',
+};
+
 String? machineTranslationLanguageCodeFor(String language) {
   final normalized = language.trim().toLowerCase();
   if (normalized.isEmpty) {
@@ -80,6 +98,49 @@ String? machineTranslationLanguageCodeFor(String language) {
 
   return _languageCodesByName[normalized] ??
       _normalizedLanguageCode(normalized);
+}
+
+String compactLanguageChipLabelFor(String language) {
+  final code = machineTranslationLanguageCodeFor(language);
+  if (code == null) {
+    return language;
+  }
+
+  final baseCode = code.split('-').first.toLowerCase();
+  final displayCode = baseCode.toUpperCase();
+  final flag = _languageFlagsByCode[baseCode];
+  if (flag == null) {
+    return displayCode;
+  }
+
+  return '$flag $displayCode';
+}
+
+String? languageFlagFor(String language) {
+  final code = machineTranslationLanguageCodeFor(language);
+  if (code == null) {
+    return null;
+  }
+
+  return _languageFlagsByCode[code.split('-').first.toLowerCase()];
+}
+
+String languageDisplayLabelFor(String language) {
+  final trimmedLanguage = language.trim();
+  if (trimmedLanguage.isEmpty) {
+    return trimmedLanguage;
+  }
+
+  final flag = languageFlagFor(trimmedLanguage);
+  if (flag == null) {
+    return trimmedLanguage;
+  }
+
+  return '$flag $trimmedLanguage';
+}
+
+String compactLanguageSummaryFor(Iterable<String> languages) {
+  return languages.map(compactLanguageChipLabelFor).join(', ');
 }
 
 String? _normalizedLanguageCode(String language) {

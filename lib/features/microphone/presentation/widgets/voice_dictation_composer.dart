@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:lingua_floor/features/microphone/data/linux_offline_voice_dictation_service.dart';
+import 'package:lingua_floor/features/microphone/data/linux_offline_voice_dictation_service_stub.dart'
+    if (dart.library.io) 'package:lingua_floor/features/microphone/data/linux_offline_voice_dictation_service.dart';
 import 'package:lingua_floor/features/microphone/domain/models/linux_offline_dictation_diagnostics.dart';
 import 'package:lingua_floor/features/microphone/data/speech_to_text_voice_dictation_service.dart';
 import 'package:lingua_floor/features/microphone/data/unsupported_voice_dictation_service.dart';
@@ -16,17 +17,34 @@ class VoiceDictationComposer extends StatefulWidget {
     super.key,
     this.service,
     this.onSubmitted,
+    this.title = 'Voice note composer',
+    this.subtitle =
+        'Speak instead of type when drafting a floor request or chat message.',
+    this.hintText = 'Type here or use dictation to fill this message box.',
     this.submitLabel = 'Save draft',
     this.submissionFeedbackPrefix = 'Draft saved locally:',
     this.clearAfterSubmit = false,
+    this.readOnly = false,
+    this.enableSubmit = true,
+    this.text,
+    this.onTextChanged,
+    this.textFieldKey,
     this.showLinuxOfflineGuidance,
   });
 
   final VoiceDictationService? service;
   final FutureOr<void> Function(String)? onSubmitted;
+  final String title;
+  final String subtitle;
+  final String hintText;
   final String submitLabel;
   final String? submissionFeedbackPrefix;
   final bool clearAfterSubmit;
+  final bool readOnly;
+  final bool enableSubmit;
+  final String? text;
+  final ValueChanged<String>? onTextChanged;
+  final Key? textFieldKey;
   final bool? showLinuxOfflineGuidance;
 
   @override
@@ -53,6 +71,9 @@ class _VoiceDictationComposerState extends State<VoiceDictationComposer> {
     _service = widget.service ?? _buildDefaultService();
     _textController = TextEditingController();
     _state = _service.currentState;
+    if (widget.text != null && widget.text!.isNotEmpty) {
+      _setComposerText(widget.text!);
+    }
     _linuxDiagnosticsProvider =
         _service is LinuxOfflineDictationDiagnosticsProvider
         ? _service as LinuxOfflineDictationDiagnosticsProvider
@@ -71,6 +92,19 @@ class _VoiceDictationComposerState extends State<VoiceDictationComposer> {
   }
 
   @override
+  void didUpdateWidget(covariant VoiceDictationComposer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextText = widget.text;
+    if (nextText != null && nextText != _textController.text) {
+      _setComposerText(nextText);
+    }
+
+    if (widget.readOnly && !oldWidget.readOnly && _state.isListening) {
+      unawaited(_service.stopListening());
+    }
+  }
+
+  @override
   void dispose() {
     _subscription?.cancel();
     _linuxDiagnosticsSubscription?.cancel();
@@ -83,24 +117,32 @@ class _VoiceDictationComposerState extends State<VoiceDictationComposer> {
 
   @override
   Widget build(BuildContext context) {
-    final canSubmit = _textController.text.trim().isNotEmpty;
+    final canSubmit =
+        !widget.readOnly &&
+        widget.enableSubmit &&
+        !_state.isListening &&
+        _textController.text.trim().isNotEmpty;
 
     return SectionCard(
-      title: 'Voice note composer',
-      subtitle:
-          'Speak instead of type when drafting a floor request or chat message.',
+      title: widget.title,
+      subtitle: widget.subtitle,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           TextField(
+            key: widget.textFieldKey,
             controller: _textController,
+            readOnly: widget.readOnly,
             minLines: 3,
             maxLines: 5,
-            decoration: const InputDecoration(
-              hintText: 'Type here or use dictation to fill this message box.',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              hintText: widget.hintText,
+              border: const OutlineInputBorder(),
             ),
-            onChanged: (_) => setState(() {}),
+            onChanged: (value) {
+              widget.onTextChanged?.call(value);
+              setState(() {});
+            },
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -108,7 +150,7 @@ class _VoiceDictationComposerState extends State<VoiceDictationComposer> {
             runSpacing: 8,
             children: [
               FilledButton.icon(
-                onPressed: _toggleListening,
+                onPressed: widget.readOnly ? null : _toggleListening,
                 icon: Icon(
                   _state.isListening
                       ? Icons.stop_circle_outlined
@@ -119,10 +161,11 @@ class _VoiceDictationComposerState extends State<VoiceDictationComposer> {
                 ),
               ),
               OutlinedButton.icon(
-                onPressed: _textController.text.isEmpty
+                onPressed: widget.readOnly || _textController.text.isEmpty
                     ? null
                     : () {
-                        _textController.clear();
+                        _setComposerText('');
+                        widget.onTextChanged?.call('');
                         setState(() {});
                       },
                 icon: const Icon(Icons.clear),
@@ -186,6 +229,10 @@ class _VoiceDictationComposerState extends State<VoiceDictationComposer> {
   }
 
   Future<void> _toggleListening() async {
+    if (widget.readOnly) {
+      return;
+    }
+
     if (_state.isListening) {
       await _service.stopListening();
       return;
@@ -203,11 +250,8 @@ class _VoiceDictationComposerState extends State<VoiceDictationComposer> {
       _state = nextState;
       if (_textController.text != nextState.recognizedText &&
           nextState.recognizedText.isNotEmpty) {
-        _textController
-          ..text = nextState.recognizedText
-          ..selection = TextSelection.collapsed(
-            offset: nextState.recognizedText.length,
-          );
+        _setComposerText(nextState.recognizedText);
+        widget.onTextChanged?.call(nextState.recognizedText);
       }
     });
   }
@@ -225,6 +269,10 @@ class _VoiceDictationComposerState extends State<VoiceDictationComposer> {
   }
 
   Future<void> _submitEntry() async {
+    if (widget.readOnly || !widget.enableSubmit) {
+      return;
+    }
+
     final message = _textController.text.trim();
     if (message.isEmpty) {
       return;
@@ -246,9 +294,16 @@ class _VoiceDictationComposerState extends State<VoiceDictationComposer> {
     }
 
     if (widget.clearAfterSubmit) {
-      _textController.clear();
+      _setComposerText('');
+      widget.onTextChanged?.call('');
       setState(() {});
     }
+  }
+
+  void _setComposerText(String text) {
+    _textController
+      ..text = text
+      ..selection = TextSelection.collapsed(offset: text.length);
   }
 
   bool get _shouldShowLinuxOfflineGuidance {

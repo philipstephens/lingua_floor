@@ -32,6 +32,10 @@ class TranscriptFeedController extends ChangeNotifier {
     await _service.replaceSegments(segments);
   }
 
+  Future<void> appendSegment(TranscriptSegment segment) async {
+    await _service.appendSegment(segment);
+  }
+
   Future<void> clear() async {
     await _service.clear();
   }

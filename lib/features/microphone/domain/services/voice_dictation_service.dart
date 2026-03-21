@@ -7,10 +7,7 @@ abstract class VoiceDictationService {
 
   Future<void> initialize();
 
-  Future<void> startListening({
-    String existingText = '',
-    String? localeId,
-  });
+  Future<void> startListening({String existingText = '', String? localeId});
 
   Future<void> stopListening();
 

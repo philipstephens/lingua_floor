@@ -2,6 +2,7 @@ import 'package:lingua_floor/core/models/event_session.dart';
 import 'package:lingua_floor/core/translation/language_code_mapper.dart';
 import 'package:lingua_floor/features/microphone/domain/models/transcript_segment.dart';
 import 'package:lingua_floor/features/transcript/domain/models/transcript_lane.dart';
+import 'package:lingua_floor/features/transcript/domain/transcript_storage_keys.dart';
 
 List<String> transcriptLaneLanguagesForSession(EventSession session) {
   final languages = <String>[];
@@ -46,6 +47,54 @@ Map<String, TranscriptLane> buildSharedTranscriptLanes({
       session: session,
       laneLanguage: language,
       sharedSegments: sharedSegments,
+    );
+  }
+
+  return Map<String, TranscriptLane>.unmodifiable(lanes);
+}
+
+Map<String, TranscriptLane> buildPersistedTranscriptLanes({
+  required String eventId,
+  required EventSession session,
+  required List<TranscriptSegment> sharedSegments,
+  required Map<String, Map<String, String>> translationsByLanguage,
+}) {
+  if (sharedSegments.isEmpty) {
+    return const {};
+  }
+
+  final lanes = <String, TranscriptLane>{};
+  for (final language in transcriptLaneLanguagesForSession(session)) {
+    final translationsForLanguage =
+        translationsByLanguage[language.trim().toLowerCase()];
+    final laneSegments = translationsForLanguage == null
+        ? sharedSegments
+        : List<TranscriptSegment>.generate(sharedSegments.length, (index) {
+            final segment = sharedSegments[index];
+            final utteranceId = canonicalTranscriptUtteranceId(
+              eventId: eventId,
+              sequenceNumber: index + 1,
+              capturedAt: segment.capturedAt,
+            );
+            final translatedText = translationsForLanguage[utteranceId];
+            if (translatedText == null) {
+              return segment;
+            }
+
+            return TranscriptSegment(
+              speakerLabel: segment.speakerLabel,
+              originalText: segment.originalText,
+              translatedText: translatedText,
+              capturedAt: segment.capturedAt,
+              sourceLanguage: segment.sourceLanguage,
+              targetLanguage: language,
+              status: TranscriptSegmentStatus.translated,
+            );
+          }, growable: false);
+    lanes[language] = buildSharedTranscriptLane(
+      session: session,
+      laneLanguage: language,
+      sharedSegments: laneSegments,
     );
   }
 

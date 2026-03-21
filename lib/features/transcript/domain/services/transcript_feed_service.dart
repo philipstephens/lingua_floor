@@ -9,6 +9,8 @@ abstract class TranscriptFeedService {
 
   Future<void> replaceSegments(List<TranscriptSegment> segments);
 
+  Future<void> appendSegment(TranscriptSegment segment);
+
   Future<void> clear();
 
   void dispose();
