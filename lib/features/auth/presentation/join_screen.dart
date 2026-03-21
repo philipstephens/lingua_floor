@@ -323,12 +323,23 @@ class _JoinScreenState extends State<JoinScreen> {
         _displayNameController.text.trim().isNotEmpty || _usesSessionCatalog
         ? _displayNameController.text
         : fallbackName;
-    final didLogin = await _authController.login(
-      displayName: displayName,
+    final normalizedDisplayName = displayName.trim();
+    final shouldReuseCurrentSession = _shouldReuseCurrentSession(
       role: role,
+      displayName: normalizedDisplayName,
       eventId: selectedEventId,
     );
-    if (!didLogin || !context.mounted) {
+    if (!shouldReuseCurrentSession) {
+      final didLogin = await _authController.login(
+        displayName: displayName,
+        role: role,
+        eventId: selectedEventId,
+      );
+      if (!didLogin || !context.mounted) {
+        return;
+      }
+    }
+    if (!context.mounted) {
       return;
     }
 
@@ -342,10 +353,12 @@ class _JoinScreenState extends State<JoinScreen> {
     final eventSessionService =
         workspace?.eventSessionService ?? _eventSessionService;
     final session = eventSessionService.currentSession;
+    final currentUserName =
+        _authController.currentUser?.displayName ?? normalizedDisplayName;
     final destination = switch (role) {
       AppRole.host => HostDashboardScreen(
         session: session,
-        currentUserName: displayName.trim(),
+        currentUserName: currentUserName,
         onLogoutRequested: _authController.logout,
         eventSessionService: eventSessionService,
         handRaiseService:
@@ -359,7 +372,7 @@ class _JoinScreenState extends State<JoinScreen> {
       ),
       AppRole.participant => ParticipantRoomScreen(
         session: session,
-        currentUserName: displayName.trim(),
+        currentUserName: currentUserName,
         onLogoutRequested: _authController.logout,
         preferredTranscriptLanguage:
             _authController.preferredTranscriptLanguage,
@@ -383,6 +396,21 @@ class _JoinScreenState extends State<JoinScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => destination));
+  }
+
+  bool _shouldReuseCurrentSession({
+    required AppRole role,
+    required String displayName,
+    required String eventId,
+  }) {
+    final currentUser = _authController.currentUser;
+    if (currentUser == null) {
+      return false;
+    }
+
+    return currentUser.role == role &&
+        currentUser.eventId == eventId &&
+        currentUser.displayName.trim() == displayName;
   }
 
   void _openThirdPartyNotices(BuildContext context) {
